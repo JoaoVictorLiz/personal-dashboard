@@ -66,6 +66,32 @@ final class MoneyTest extends TestCase
         Money::fromCents(10000, 'EUR')->add(Money::fromCents(10000, 'CAD'));
     }
 
+    public function test_subtracting_returns_a_new_amount(): void
+    {
+        $a = Money::fromCents(10000, 'EUR');
+        $b = Money::fromCents(2550, 'EUR');
+
+        $rest = $a->subtract($b);
+
+        self::assertSame(7450, $rest->cents());
+        self::assertSame(10000, $a->cents(), 'subtract() nao pode mutar os operandos');
+    }
+
+    public function test_it_refuses_to_subtract_amounts_in_different_currencies(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromCents(10000, 'EUR')->subtract(Money::fromCents(1, 'CAD'));
+    }
+
+    public function test_subtracting_more_than_you_have_is_not_allowed(): void
+    {
+        // Nao existe dinheiro negativo: o proprio fromCents() barra.
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromCents(100, 'EUR')->subtract(Money::fromCents(101, 'EUR'));
+    }
+
     public function test_it_compares_amounts_of_the_same_currency(): void
     {
         // Vai ser usado pra "currentAmount >= targetAmount" => meta batida.

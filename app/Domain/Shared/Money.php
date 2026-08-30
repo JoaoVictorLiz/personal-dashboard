@@ -57,4 +57,11 @@ final class Money
 
         return $this->cents >= $other->cents;
     }
+
+    public function subtract(self $other): self
+    {
+        $this->assertSameCurrency($other);
+
+        return self::fromCents($this->cents - $other->cents, $this->currency);
+    }
 }

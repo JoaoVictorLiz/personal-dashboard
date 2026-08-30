@@ -222,4 +222,70 @@ final class SavingsGoalTest extends TestCase
         self::assertCount(1, $goal->releaseEvents());
         self::assertCount(0, $goal->releaseEvents(), 'segunda chamada volta vazia');
     }
+
+    // --- ritmo necessario -------------------------------------------
+
+    public function test_a_goal_without_a_target_date_has_no_required_pace(): void
+    {
+        $goal = $this->goal();
+
+        self::assertNull($goal->requiredDailyPace(new DateTimeImmutable('2026-01-01')));
+    }
+
+    public function test_a_completed_goal_has_no_required_pace(): void
+    {
+        $goal = SavingsGoal::create(
+            id: 'goal-1',
+            title: 'Reserva',
+            targetAmount: $this->eur(100_000),
+            targetDate: new DateTimeImmutable('2026-12-31'),
+        );
+        $this->contribute($goal, 100_000); // conclui
+
+        self::assertNull($goal->requiredDailyPace(new DateTimeImmutable('2026-06-01')));
+    }
+
+    public function test_required_pace_is_remaining_divided_by_days_left(): void
+    {
+        $goal = SavingsGoal::create(
+            id: 'goal-1',
+            title: 'Reserva',
+            targetAmount: $this->eur(100_000),
+            targetDate: new DateTimeImmutable('2026-01-11'),
+        );
+        $this->contribute($goal, 40_000); // restam 60_000
+
+        // de 01-jan a 11-jan = 10 dias => 60_000 / 10 = 6_000 por dia
+        $pace = $goal->requiredDailyPace(new DateTimeImmutable('2026-01-01'));
+        self::assertTrue($pace->equals($this->eur(6_000)));
+    }
+
+    public function test_required_pace_rounds_up_so_you_do_not_fall_short(): void
+    {
+        $goal = SavingsGoal::create(
+            id: 'goal-1',
+            title: 'Reserva',
+            targetAmount: $this->eur(10_000),
+            targetDate: new DateTimeImmutable('2026-01-04'),
+        );
+
+        // 10_000 / 3 dias = 3333,33... => arredonda pra CIMA => 3334
+        $pace = $goal->requiredDailyPace(new DateTimeImmutable('2026-01-01'));
+        self::assertTrue($pace->equals($this->eur(3334)));
+    }
+
+    public function test_an_overdue_goal_needs_the_whole_remaining_amount_now(): void
+    {
+        $goal = SavingsGoal::create(
+            id: 'goal-1',
+            title: 'Reserva',
+            targetAmount: $this->eur(100_000),
+            targetDate: new DateTimeImmutable('2026-01-01'),
+        );
+        $this->contribute($goal, 30_000); // restam 70_000
+
+        // prazo ja passou => ritmo = restante inteiro
+        $pace = $goal->requiredDailyPace(new DateTimeImmutable('2026-02-15'));
+        self::assertTrue($pace->equals($this->eur(70_000)));
+    }
 }

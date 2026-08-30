@@ -74,6 +74,21 @@ final class SavingsGoal
 
     }
 
+    public function requiredDailyPace(DateTimeImmutable $today): ?Money
+    {
+        if ($this->targetDate === null || $this->status === SavingsGoalStatus::COMPLETED) {
+            return null;
+        }
+
+        $remaining = $this->targetAmount->subtract($this->currentAmount);
+
+        $daysLeft = max(1, (int) $today->diff($this->targetDate)->format('%r%a'));
+
+        $paceCents = (int) ceil($remaining->cents() / $daysLeft);
+
+        return Money::fromCents($paceCents, $this->targetAmount->currency());
+    }
+
     public function currentAmount(): Money
     {
         return $this->currentAmount;
