@@ -16,6 +16,9 @@ final class SavingsGoal
     /** @var list<DomainEvent> */
     private array $domainEvents = [];
 
+    /** @var list<Contribution> */
+    private array $contributions = [];
+
     private function __construct(
         private readonly string $id,
         private readonly string $title,
@@ -46,8 +49,14 @@ final class SavingsGoal
         return intdiv($amount->cents() * 100, $this->targetAmount->cents());
     }
 
-    public function addContribution(Money $amount): void
-    {
+    public function addContribution(
+        string $contributionId,
+        Money $amount,
+        DateTimeImmutable $date,
+        ?string $note = null,
+    ): void {
+        $this->contributions[] = new Contribution($contributionId, $this->id, $amount, $date, $note);
+
         $before = $this->percentageOf($this->currentAmount);
         $this->currentAmount = $this->currentAmount->add($amount);
         $after = $this->percentageOf($this->currentAmount);
@@ -91,5 +100,10 @@ final class SavingsGoal
         $this->domainEvents = [];
 
         return $events;
+    }
+
+    public function contributions(): array
+    {
+        return $this->contributions;
     }
 }

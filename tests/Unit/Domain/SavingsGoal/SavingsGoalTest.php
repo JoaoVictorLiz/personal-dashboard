@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Domain\SavingsGoal;
 
+use App\Domain\SavingsGoal\Contribution;
 use App\Domain\SavingsGoal\Event\GoalCompleted;
 use App\Domain\SavingsGoal\Event\MilestoneReached;
 use App\Domain\SavingsGoal\SavingsGoal;
@@ -15,6 +16,8 @@ use PHPUnit\Framework\TestCase;
 
 final class SavingsGoalTest extends TestCase
 {
+    private int $seq = 0;
+
     private function goal(int $targetCents = 1_000_000): SavingsGoal
     {
         return SavingsGoal::create(
@@ -27,6 +30,17 @@ final class SavingsGoalTest extends TestCase
     private function eur(int $cents): Money
     {
         return Money::fromCents($cents, 'EUR');
+    }
+
+    /** Helper: adiciona uma contribuicao gerando id e data automaticamente. */
+    private function contribute(SavingsGoal $goal, int $cents, ?string $note = null): void
+    {
+        $goal->addContribution(
+            contributionId: 'c-'.++$this->seq,
+            amount: $this->eur($cents),
+            date: new DateTimeImmutable('2026-01-01'),
+            note: $note,
+        );
     }
 
     /**
@@ -54,8 +68,8 @@ final class SavingsGoalTest extends TestCase
     {
         $goal = $this->goal();
 
-        $goal->addContribution($this->eur(30_000));
-        $goal->addContribution($this->eur(20_000));
+        $this->contribute($goal, 30_000);
+        $this->contribute($goal, 20_000);
 
         self::assertTrue($goal->currentAmount()->equals($this->eur(50_000)));
     }
@@ -78,13 +92,57 @@ final class SavingsGoalTest extends TestCase
         self::assertSame(SavingsGoalStatus::ACTIVE, $this->goal()->status());
     }
 
-    // --- conclusao -------------------------------------------------------
+    // --- contribuicoes registradas -------------------------------------
+
+    public function test_a_contribution_is_recorded_with_its_details(): void
+    {
+        $goal = $this->goal();
+
+        $goal->addContribution(
+            contributionId: 'c-42',
+            amount: $this->eur(30_000),
+            date: new DateTimeImmutable('2026-03-10'),
+            note: 'bonus anual',
+        );
+
+        $contributions = $goal->contributions();
+        self::assertCount(1, $contributions);
+
+        $c = $contributions[0];
+        self::assertInstanceOf(Contribution::class, $c);
+        self::assertSame('c-42', $c->id());
+        self::assertSame('goal-1', $c->savingsGoalId());
+        self::assertTrue($c->amount()->equals($this->eur(30_000)));
+        self::assertEquals(new DateTimeImmutable('2026-03-10'), $c->date());
+        self::assertSame('bonus anual', $c->note());
+    }
+
+    public function test_a_contribution_note_is_optional(): void
+    {
+        $goal = $this->goal();
+        $this->contribute($goal, 10_000);
+
+        self::assertNull($goal->contributions()[0]->note());
+    }
+
+    public function test_contributions_are_kept_in_the_order_they_were_added(): void
+    {
+        $goal = $this->goal();
+        $this->contribute($goal, 10_000);
+        $this->contribute($goal, 20_000);
+        $this->contribute($goal, 30_000);
+
+        $cents = array_map(static fn (Contribution $c) => $c->amount()->cents(), $goal->contributions());
+        self::assertSame([10_000, 20_000, 30_000], $cents);
+    }
+
+    // --- conclusao ----------------------------------------------------
 
     public function test_reaching_the_target_completes_the_goal_and_records_an_event(): void
     {
         $goal = $this->goal(targetCents: 100_000);
 
-        $goal->addContribution($this->eur(100_000));
+        $this->contribute($goal, 100_000);
 
         self::assertSame(SavingsGoalStatus::COMPLETED, $goal->status());
 
@@ -97,22 +155,22 @@ final class SavingsGoalTest extends TestCase
     {
         $goal = $this->goal(targetCents: 100_000);
 
-        $goal->addContribution($this->eur(150_000)); // passa da meta
-        $goal->releaseEvents();                      // limpa eventos da 1a vez
+        $this->contribute($goal, 150_000); // passa da meta
+        $goal->releaseEvents();            // limpa eventos da 1a vez
 
-        $goal->addContribution($this->eur(10_000));  // contribui de novo
+        $this->contribute($goal, 10_000);  // contribui de novo
 
         self::assertSame(SavingsGoalStatus::COMPLETED, $goal->status());
         self::assertCount(0, $goal->releaseEvents(), 'nao dispara nada de novo');
     }
 
-    // --- marcos (25 / 50 / 75) ----------------------------------------
+    // --- marcos (25 / 50 / 75) --------------------------------------
 
     public function test_crossing_a_milestone_records_a_milestone_reached_event(): void
     {
         $goal = $this->goal(targetCents: 1_000_000);
 
-        $goal->addContribution($this->eur(300_000)); // 30% -> cruzou 25
+        $this->contribute($goal, 300_000); // 30% -> cruzou 25
 
         $milestones = $this->only($goal->releaseEvents(), MilestoneReached::class);
         self::assertCount(1, $milestones);
@@ -124,10 +182,10 @@ final class SavingsGoalTest extends TestCase
     {
         $goal = $this->goal(targetCents: 1_000_000);
 
-        $goal->addContribution($this->eur(300_000)); // 30% -> cruzou 25
+        $this->contribute($goal, 300_000); // 30% -> cruzou 25
         $goal->releaseEvents();
 
-        $goal->addContribution($this->eur(100_000)); // 40% -> nao cruza nada
+        $this->contribute($goal, 100_000); // 40% -> nao cruza nada
 
         self::assertCount(0, $this->only($goal->releaseEvents(), MilestoneReached::class));
     }
@@ -136,7 +194,7 @@ final class SavingsGoalTest extends TestCase
     {
         $goal = $this->goal(targetCents: 1_000_000);
 
-        $goal->addContribution($this->eur(800_000)); // 0% -> 80%
+        $this->contribute($goal, 800_000); // 0% -> 80%
 
         $milestones = $this->only($goal->releaseEvents(), MilestoneReached::class);
         self::assertSame([25, 50, 75], array_map(static fn ($e) => $e->percentage, $milestones));
@@ -146,7 +204,7 @@ final class SavingsGoalTest extends TestCase
     {
         $goal = $this->goal(targetCents: 100_000);
 
-        $goal->addContribution($this->eur(100_000)); // 0% -> 100%
+        $this->contribute($goal, 100_000); // 0% -> 100%
 
         $events = $goal->releaseEvents();
         self::assertSame(
@@ -159,7 +217,7 @@ final class SavingsGoalTest extends TestCase
     public function test_releasing_events_empties_the_list(): void
     {
         $goal = $this->goal(targetCents: 1_000_000);
-        $goal->addContribution($this->eur(300_000));
+        $this->contribute($goal, 300_000);
 
         self::assertCount(1, $goal->releaseEvents());
         self::assertCount(0, $goal->releaseEvents(), 'segunda chamada volta vazia');
