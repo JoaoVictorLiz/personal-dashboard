@@ -64,4 +64,31 @@ Backend primeiro e prioritário (API REST). Frontend é opcional e só entra com
 - Há também um projeto de budget API em Symfony, pausado, anterior a este.
 
 ## Status atual
-Projeto Laravel recém-criado. `.env` configurado pra MySQL local via XAMPP. Modelo de domínio (SavingsGoal, Contribution) desenhado em conversa, ainda não implementado em código. Próximo passo: criar `app/Domain/SavingsGoal/SavingsGoal.php` em PHP puro, com teste unitário cobrindo a regra de incremento e o evento GoalCompleted.
+**Camada de domínio da v1 completa e testada** (31 testes verdes, `./vendor/bin/phpunit`). Git limpo, remote `github.com/JoaoVictorLiz/personal-dashboard`.
+
+Implementado em `app/Domain/`:
+- `Shared/Money.php` — Value Object (centavos int + moeda), imutável. `fromCents`, `add`, `subtract`, `equals`, `isGreaterThanOrEqualTo`. Recusa moedas diferentes; proíbe negativo.
+- `Shared/DomainEvent.php` — interface-marcador.
+- `SavingsGoal/SavingsGoal.php` — raiz do agregado. Construtor privado + `create()`. Guarda alvo positivo. `addContribution(id, Money, date, ?note)` → cria `Contribution`, incrementa `currentAmount`, coleta eventos. Marcos 25/50/75 (`MilestoneReached`, 1 por marco cruzado) e conclusão (`GoalCompleted`, uma vez só via guarda `=== ACTIVE`). `requiredDailyPace(today)`: `?Money`, arredonda pra cima, `max(1, dias)` pra prazo vencido. `releaseEvents()` esvazia a lista.
+- `SavingsGoal/Contribution.php` — entidade filha, imutável.
+- `SavingsGoal/SavingsGoalStatus.php` — enum backed (active/completed).
+- `SavingsGoal/Event/GoalCompleted.php`, `MilestoneReached.php`.
+
+**Camada Application: caso de uso `AddContribution` completo e testado.**
+- `app/Domain/SavingsGoal/SavingsGoalRepository.php` — interface (porta), no Domain. `get(id): SavingsGoal` (lança `SavingsGoalNotFound`), `save(SavingsGoal)`.
+- `app/Domain/SavingsGoal/SavingsGoalNotFound.php` — exceção.
+- `app/Domain/Shared/EventDispatcher.php` — interface (porta). `dispatch(DomainEvent ...$events)`.
+- `app/Application/SavingsGoal/AddContributionCommand.php` — DTO (savingsGoalId, contributionId, Money, date, ?note). Controller monta a partir do request, incl. gerar o UUID.
+- `app/Application/SavingsGoal/AddContributionHandler.php` — orquestra: `get` → `addContribution` → `save` → `dispatch(...releaseEvents())`. Zero regra de negócio.
+- `SavingsGoal::id()` adicionado.
+- Testado com `tests/Fakes/InMemorySavingsGoalRepository.php` + `tests/Fakes/RecordingEventDispatcher.php`.
+
+Falta ainda: `SavingsGoal::reconstitute()` (recriar do banco sem rodar regras de criação) — entra junto com o repositório Eloquent.
+
+**Próximo passo (pausado aqui em 2026-08-30):** camada Infrastructure. Nessa ordem:
+1. Migrations: tabelas `savings_goals` e `contributions`.
+2. Models Eloquent (`app/Infrastructure/Persistence/Eloquent/`) — só mapeamento, sem regra.
+3. `EloquentSavingsGoalRepository implements SavingsGoalRepository` — converte Model ↔ entidade de domínio (precisa do `reconstitute()`).
+4. `LaravelEventDispatcher implements EventDispatcher` — joga no event bus do Laravel.
+5. Service provider com os `bind()` das interfaces → implementações.
+Depois disso: Http (controller fino + rota `POST /savings-goals/{id}/contributions`), e uma query de leitura pra listar metas. Só então, frontend (opcional).

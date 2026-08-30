@@ -121,4 +121,9 @@ final class SavingsGoal
     {
         return $this->contributions;
     }
+
+    public function id(): string
+    {
+        return $this->id;
+    }
 }
