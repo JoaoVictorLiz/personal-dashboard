@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Domain\SavingsGoal;
 
 use App\Domain\SavingsGoal\Event\GoalCompleted;
+use App\Domain\SavingsGoal\Event\MilestoneReached;
 use App\Domain\Shared\DomainEvent;
 use App\Domain\Shared\Money;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 final class SavingsGoal
 {
@@ -29,15 +31,32 @@ final class SavingsGoal
         Money $targetAmount,
         ?DateTimeImmutable $targetDate = null,
     ): self {
+        if ($targetAmount->cents() <= 0) {
+            throw new InvalidArgumentException('Target amount must be positive.');
+        }
+
         $currentAmount = Money::fromCents(0, $targetAmount->currency());
 
         return new self($id, $title, $targetAmount, $currentAmount, SavingsGoalStatus::ACTIVE, $targetDate);
 
     }
 
+    private function percentageOf(Money $amount): int
+    {
+        return intdiv($amount->cents() * 100, $this->targetAmount->cents());
+    }
+
     public function addContribution(Money $amount): void
     {
+        $before = $this->percentageOf($this->currentAmount);
         $this->currentAmount = $this->currentAmount->add($amount);
+        $after = $this->percentageOf($this->currentAmount);
+
+        foreach ([25, 50, 75] as $milestone) {
+            if ($before < $milestone && $after >= $milestone) {
+                $this->recordEvent(new MilestoneReached($this->id, $milestone));
+            }
+        }
 
         if ($this->status === SavingsGoalStatus::ACTIVE && $this->currentAmount->isGreaterThanOrEqualTo($this->targetAmount)) {
             $this->status = SavingsGoalStatus::COMPLETED;
