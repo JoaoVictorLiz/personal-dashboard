@@ -11,8 +11,7 @@ final class Money
     private function __construct(
         private readonly int $cents,
         private readonly string $currency,
-    ) {
-    }
+    ) {}
 
     public static function fromCents(int $cents, string $currency): self
     {
@@ -45,7 +44,7 @@ final class Money
         return $this->cents === $other->cents && $this->currency === $other->currency;
     }
 
-    public function add(self $other): self 
+    public function add(self $other): self
     {
         $this->assertSameCurrency($other);
 
@@ -58,5 +57,4 @@ final class Money
 
         return $this->cents >= $other->cents;
     }
-
 }
