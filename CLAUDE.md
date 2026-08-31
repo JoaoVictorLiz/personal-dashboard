@@ -100,6 +100,8 @@ Implementado em `app/Domain/`:
 - `GET /savings-goals/{id}` → `ShowSavingsGoalController` — **carrega o agregado** via repo e monta o payload (reusa `requiredDailyPace`, `progressPercentage`, `contributions()`); decisão consciente: read model separado pra lista, reúso do domínio pro detalhe (pace é regra, não duplicar).
 - `SavingsGoal::progressPercentage(): int` adicionado.
 
-**Estado: backend da v1 fechado ponta a ponta.** 55 testes verdes. 4 endpoints: `POST /savings-goals`, `GET /savings-goals`, `GET /savings-goals/{id}`, `POST /savings-goals/{id}/contributions`.
+**Edição de meta** — `PATCH /savings-goals/{id}` (`UpdateSavingsGoal` command/handler/controller/request). Domínio ganhou `rename()`, `changeTargetDate()`, `changeTarget()` (tira `readonly` de title/targetAmount/targetDate) + `reevaluateCompletion()` privado: só as transições reais ACTIVE↔COMPLETED mexem no status; entrar em COMPLETED dispara `GoalCompleted`, reabrir é silencioso; marcos não são reavaliados. PATCH parcial (campos null = não mexer; `changesTargetDate` bool desfaz a ambiguidade "não enviado" vs "null"). Retorna 204.
+
+**Estado: backend da v1 fechado ponta a ponta.** 72 testes verdes. 5 endpoints: `POST /savings-goals`, `GET /savings-goals`, `GET /savings-goals/{id}`, `PATCH /savings-goals/{id}`, `POST /savings-goals/{id}/contributions`.
 
 **Próximo passo (pausado 2026-08-31):** opções — (a) listener real reagindo a `GoalCompleted`/`MilestoneReached` (ex: gravar num log/tabela de notificações), fechando o ciclo de eventos; (b) polir a API (paginação na lista, `GET` de contribuições, Resource classes); (c) frontend React (opcional, ponto forte do João). Nada disso é obrigatório pra v1 — o núcleo de aprendizado (Clean Arch + Domain Events + CQRS) está exercitado.
