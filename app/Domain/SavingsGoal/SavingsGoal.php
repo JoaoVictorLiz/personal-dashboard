@@ -104,6 +104,11 @@ final class SavingsGoal
         return Money::fromCents($paceCents, $this->targetAmount->currency());
     }
 
+    public function progressPercentage(): int
+    {
+        return $this->percentageOf($this->currentAmount);
+    }
+
     public function currentAmount(): Money
     {
         return $this->currentAmount;

@@ -92,7 +92,14 @@ Implementado em `app/Domain/`:
 - `routes/api.php` + `AddContributionController` (invokable, fino) + `AddContributionRequest` (validação). `bootstrap/app.php`: rota `api`, e `SavingsGoalNotFound` → 404.
 - Testes: `tests/Feature/Infrastructure/` (repo + bindings), `tests/Feature/Http/` (endpoint, 201/404/422).
 
-**Próximo passo (pausado 2026-08-31):** ainda não dá pra criar meta via API. Fatias que faltam pra v1:
-1. `CreateSavingsGoal` — command + handler + `POST /savings-goals` (gera UUID no controller, valida title/targetAmount/targetDate).
-2. Lado de leitura (CQRS query): listar metas e detalhe de uma meta com progresso %, `requiredDailyPace`, marcos. Provavelmente uma query lendo direto via Eloquent/DB, sem passar pelo agregado.
-3. Só então: frontend (opcional).
+**`CreateSavingsGoal`** — `CreateSavingsGoalCommand` + `CreateSavingsGoalHandler` (só repo, sem dispatcher — criação não gera evento) + `POST /savings-goals` (`CreateSavingsGoalController` + `CreateSavingsGoalRequest`, UUID no controller).
+
+**Lado de leitura (CQRS):**
+- `SavingsGoalQueries::list()` (Infra) — projeção direto da tabela, sem reconstruir agregado. Calcula `progressPercentage` inline.
+- `GET /savings-goals` → `ListSavingsGoalsController` (delega pra query).
+- `GET /savings-goals/{id}` → `ShowSavingsGoalController` — **carrega o agregado** via repo e monta o payload (reusa `requiredDailyPace`, `progressPercentage`, `contributions()`); decisão consciente: read model separado pra lista, reúso do domínio pro detalhe (pace é regra, não duplicar).
+- `SavingsGoal::progressPercentage(): int` adicionado.
+
+**Estado: backend da v1 fechado ponta a ponta.** 55 testes verdes. 4 endpoints: `POST /savings-goals`, `GET /savings-goals`, `GET /savings-goals/{id}`, `POST /savings-goals/{id}/contributions`.
+
+**Próximo passo (pausado 2026-08-31):** opções — (a) listener real reagindo a `GoalCompleted`/`MilestoneReached` (ex: gravar num log/tabela de notificações), fechando o ciclo de eventos; (b) polir a API (paginação na lista, `GET` de contribuições, Resource classes); (c) frontend React (opcional, ponto forte do João). Nada disso é obrigatório pra v1 — o núcleo de aprendizado (Clean Arch + Domain Events + CQRS) está exercitado.
