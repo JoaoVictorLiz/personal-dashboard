@@ -44,6 +44,21 @@ final class SavingsGoal
 
     }
 
+    public static function reconstitute(
+        string $id,
+        string $title,
+        Money $targetAmount,
+        Money $currentAmount,
+        SavingsGoalStatus $status,
+        ?DateTimeImmutable $targetDate,
+        Contribution ...$contributions,
+    ): self {
+        $goal = new self($id, $title, $targetAmount, $currentAmount, $status, $targetDate);
+        $goal->contributions = $contributions;
+
+        return $goal;
+    }
+
     private function percentageOf(Money $amount): int
     {
         return intdiv($amount->cents() * 100, $this->targetAmount->cents());
@@ -125,5 +140,15 @@ final class SavingsGoal
     public function id(): string
     {
         return $this->id;
+    }
+
+    public function title(): string
+    {
+        return $this->title;
+    }
+
+    public function targetAmount(): Money
+    {
+        return $this->targetAmount;
     }
 }
