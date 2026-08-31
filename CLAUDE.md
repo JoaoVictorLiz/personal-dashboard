@@ -83,12 +83,16 @@ Implementado em `app/Domain/`:
 - `SavingsGoal::id()` adicionado.
 - Testado com `tests/Fakes/InMemorySavingsGoalRepository.php` + `tests/Fakes/RecordingEventDispatcher.php`.
 
-Falta ainda: `SavingsGoal::reconstitute()` (recriar do banco sem rodar regras de criação) — entra junto com o repositório Eloquent.
+**Camada Infrastructure + HTTP: fatia `AddContribution` completa ponta a ponta** (46 testes verdes).
+- Migrations `savings_goals` + `contributions` (PK char(36) UUID, Money = `*_amount_cents` bigint + `currency` char(3), `current_amount_cents` guardado).
+- `app/Infrastructure/Persistence/Eloquent/` — `SavingsGoalModel`, `ContributionModel` (só mapeamento, `$keyType='string'`, `$incrementing=false`), `EloquentSavingsGoalRepository` (tradução Model ↔ domínio, `updateOrCreate` upsert sem tratar remoção).
+- `SavingsGoal::reconstitute()` — reidrata do banco sem guarda/eventos. `create()` = nascimento, `reconstitute()` = recarga.
+- `app/Infrastructure/Events/LaravelEventDispatcher` — joga no event bus do Laravel.
+- `app/Infrastructure/Providers/InfrastructureServiceProvider` (registrado em `bootstrap/providers.php`) — `bind()` das duas portas → adaptadores. Único ponto de encontro interface↔implementação.
+- `routes/api.php` + `AddContributionController` (invokable, fino) + `AddContributionRequest` (validação). `bootstrap/app.php`: rota `api`, e `SavingsGoalNotFound` → 404.
+- Testes: `tests/Feature/Infrastructure/` (repo + bindings), `tests/Feature/Http/` (endpoint, 201/404/422).
 
-**Próximo passo (pausado aqui em 2026-08-30):** camada Infrastructure. Nessa ordem:
-1. Migrations: tabelas `savings_goals` e `contributions`.
-2. Models Eloquent (`app/Infrastructure/Persistence/Eloquent/`) — só mapeamento, sem regra.
-3. `EloquentSavingsGoalRepository implements SavingsGoalRepository` — converte Model ↔ entidade de domínio (precisa do `reconstitute()`).
-4. `LaravelEventDispatcher implements EventDispatcher` — joga no event bus do Laravel.
-5. Service provider com os `bind()` das interfaces → implementações.
-Depois disso: Http (controller fino + rota `POST /savings-goals/{id}/contributions`), e uma query de leitura pra listar metas. Só então, frontend (opcional).
+**Próximo passo (pausado 2026-08-31):** ainda não dá pra criar meta via API. Fatias que faltam pra v1:
+1. `CreateSavingsGoal` — command + handler + `POST /savings-goals` (gera UUID no controller, valida title/targetAmount/targetDate).
+2. Lado de leitura (CQRS query): listar metas e detalhe de uma meta com progresso %, `requiredDailyPace`, marcos. Provavelmente uma query lendo direto via Eloquent/DB, sem passar pelo agregado.
+3. Só então: frontend (opcional).
