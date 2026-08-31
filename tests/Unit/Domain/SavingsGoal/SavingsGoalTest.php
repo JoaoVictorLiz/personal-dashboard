@@ -288,4 +288,87 @@ final class SavingsGoalTest extends TestCase
         $pace = $goal->requiredDailyPace(new DateTimeImmutable('2026-02-15'));
         self::assertTrue($pace->equals($this->eur(70_000)));
     }
+
+    // --- edicao -----------------------------------------------------
+
+    public function test_renaming_changes_the_title(): void
+    {
+        $goal = $this->goal();
+
+        $goal->rename('  Fundo de emergencia  ');
+
+        self::assertSame('Fundo de emergencia', $goal->title());
+    }
+
+    public function test_renaming_rejects_an_empty_title(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->goal()->rename('   ');
+    }
+
+    public function test_changing_the_target_date_sets_and_clears_it(): void
+    {
+        $goal = $this->goal();
+
+        $goal->changeTargetDate(new DateTimeImmutable('2028-06-30'));
+        self::assertSame('2028-06-30', $goal->targetDate()?->format('Y-m-d'));
+
+        $goal->changeTargetDate(null);
+        self::assertNull($goal->targetDate());
+    }
+
+    public function test_changing_the_target_rejects_a_non_positive_value(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->goal()->changeTarget($this->eur(0));
+    }
+
+    public function test_lowering_the_target_below_what_is_saved_completes_the_goal(): void
+    {
+        $goal = $this->goal(targetCents: 1_000_000);
+        $this->contribute($goal, 300_000);
+        $goal->releaseEvents();
+
+        $goal->changeTarget($this->eur(250_000)); // ja poupou 300_000
+
+        self::assertSame(SavingsGoalStatus::COMPLETED, $goal->status());
+        self::assertCount(1, $this->only($goal->releaseEvents(), GoalCompleted::class));
+    }
+
+    public function test_lowering_the_target_on_a_completed_goal_keeps_it_completed(): void
+    {
+        $goal = $this->goal(targetCents: 100_000);
+        $this->contribute($goal, 100_000); // conclui
+        $goal->releaseEvents();
+
+        $goal->changeTarget($this->eur(80_000)); // alvo menor, mas ainda alcancado
+
+        self::assertSame(SavingsGoalStatus::COMPLETED, $goal->status());
+        self::assertCount(0, $goal->releaseEvents(), 'nao dispara GoalCompleted de novo');
+    }
+
+    public function test_raising_the_target_reopens_a_completed_goal_without_an_event(): void
+    {
+        $goal = $this->goal(targetCents: 100_000);
+        $this->contribute($goal, 100_000); // conclui
+        $goal->releaseEvents();
+
+        $goal->changeTarget($this->eur(500_000));
+
+        self::assertSame(SavingsGoalStatus::ACTIVE, $goal->status());
+        self::assertCount(0, $goal->releaseEvents());
+    }
+
+    public function test_changing_the_target_does_not_replay_milestones(): void
+    {
+        $goal = $this->goal(targetCents: 1_000_000);
+        $this->contribute($goal, 300_000);
+        $goal->releaseEvents();
+
+        $goal->changeTarget($this->eur(400_000)); // agora 300_000/400_000 = 75%
+
+        self::assertCount(0, $this->only($goal->releaseEvents(), MilestoneReached::class));
+    }
 }

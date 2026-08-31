@@ -21,11 +21,11 @@ final class SavingsGoal
 
     private function __construct(
         private readonly string $id,
-        private readonly string $title,
-        private readonly Money $targetAmount,
+        private string $title,
+        private Money $targetAmount,
         private Money $currentAmount,
         private SavingsGoalStatus $status,
-        private readonly ?DateTimeImmutable $targetDate
+        private ?DateTimeImmutable $targetDate
     ) {}
 
     public static function create(
@@ -57,6 +57,53 @@ final class SavingsGoal
         $goal->contributions = $contributions;
 
         return $goal;
+    }
+
+    public function rename(string $title): void
+    {
+        $title = trim($title);
+
+        if ($title === '') {
+            throw new InvalidArgumentException('Title cannot be empty.');
+        }
+
+        $this->title = $title;
+    }
+
+    public function changeTargetDate(?DateTimeImmutable $targetDate): void
+    {
+        $this->targetDate = $targetDate;
+    }
+
+    public function changeTarget(Money $newTarget): void
+    {
+        if ($newTarget->cents() <= 0) {
+            throw new InvalidArgumentException('Target amount must be positive.');
+        }
+
+        $this->targetAmount = $newTarget;
+        $this->reevaluateCompletion();
+    }
+
+    /**
+     * Recalcula o status apos algo que pode ter cruzado (ou "descruzado")
+     * o alvo: entrar em COMPLETED dispara GoalCompleted uma vez; voltar a
+     * ACTIVE nao dispara evento.
+     */
+    private function reevaluateCompletion(): void
+    {
+        $reached = $this->currentAmount->isGreaterThanOrEqualTo($this->targetAmount);
+
+        if ($reached && $this->status === SavingsGoalStatus::ACTIVE) {
+            $this->status = SavingsGoalStatus::COMPLETED;
+            $this->recordEvent(new GoalCompleted($this->id));
+
+            return;
+        }
+
+        if (! $reached && $this->status === SavingsGoalStatus::COMPLETED) {
+            $this->status = SavingsGoalStatus::ACTIVE;
+        }
     }
 
     private function percentageOf(Money $amount): int
