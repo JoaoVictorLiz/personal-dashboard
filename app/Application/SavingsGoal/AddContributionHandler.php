@@ -21,7 +21,6 @@ final class AddContributionHandler
 
     public function handle(AddContributionCommand $command): void
     {
-        // TODO (voce): 4 passos, nessa ordem
         $goal = $this->goals->get($command->savingsGoalId);
 
         $goal->addContribution(
